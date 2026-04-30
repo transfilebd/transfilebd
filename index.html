@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>P2P Share — Direct File Transfer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ── BACKGROUND GRID ── -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+
+  <!-- ── TOAST CONTAINER ── -->
+  <div id="toast-container"></div>
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="logo">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <path d="M16 2L28 8V24L16 30L4 24V8L16 2Z" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+        <path d="M16 8L22 11V18L16 21L10 18V11L16 8Z" fill="var(--accent)" opacity="0.3"/>
+        <circle cx="16" cy="14.5" r="3" fill="var(--accent)"/>
+      </svg>
+      <span class="logo-text">P2P<strong>Share</strong></span>
+    </div>
+    <div class="header-right">
+      <div id="connection-badge" class="conn-badge badge-idle">
+        <span class="badge-dot"></span>
+        <span class="badge-label">Offline</span>
+      </div>
+      <button id="theme-toggle" class="icon-btn" title="Toggle theme">
+        <svg id="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 1 — HOME (Create / Join)
+  ══════════════════════════════════════════ -->
+  <main id="screen-home" class="screen active">
+    <div class="hero">
+      <h1 class="hero-title">Transfer Files<br/><em>Peer to Peer</em></h1>
+      <p class="hero-sub">No server. No upload. Pure direct connection.</p>
+    </div>
+
+    <div class="card-grid">
+      <!-- Create Room -->
+      <div class="card card-create">
+        <div class="card-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+        </div>
+        <h2>Create Room</h2>
+        <p>Generate a unique room code and share it with the receiver.</p>
+        <div class="form-group">
+          <label>Room Password <span class="optional">(optional)</span></label>
+          <input type="password" id="create-password" placeholder="Leave blank for no password" />
+        </div>
+        <button id="btn-create" class="btn btn-primary">
+          <span>Create Room</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Join Room -->
+      <div class="card card-join">
+        <div class="card-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+        </div>
+        <h2>Join Room</h2>
+        <p>Enter the 6-digit code shared by the sender to connect.</p>
+        <div class="form-group">
+          <label>Room Code</label>
+          <input type="text" id="join-code" placeholder="e.g. 482931" maxlength="6" pattern="\d{6}" />
+        </div>
+        <div class="form-group">
+          <label>Password <span class="optional">(if required)</span></label>
+          <input type="password" id="join-password" placeholder="Enter room password" />
+        </div>
+        <button id="btn-join" class="btn btn-secondary">
+          <span>Join Room</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 2 — WAITING (Sender waiting for peer)
+  ══════════════════════════════════════════ -->
+  <main id="screen-waiting" class="screen">
+    <div class="waiting-wrap">
+      <div class="waiting-anim">
+        <div class="pulse-ring"></div>
+        <div class="pulse-ring delay-1"></div>
+        <div class="pulse-ring delay-2"></div>
+        <div class="waiting-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8">
+            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 13.5 19.79 19.79 0 01.08 5 2 2 0 012 3h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 10.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 17.72z"/>
+          </svg>
+        </div>
+      </div>
+      <h2>Waiting for Receiver…</h2>
+      <p>Share this code with the person you want to send files to.</p>
+
+      <div class="room-code-display">
+        <span id="display-room-code">──────</span>
+        <button id="btn-copy-code" class="icon-btn" title="Copy code">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+          </svg>
+        </button>
+      </div>
+
+      <button id="btn-cancel-wait" class="btn btn-ghost">Cancel</button>
+    </div>
+  </main>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 3 — TRANSFER (Main workspace)
+  ══════════════════════════════════════════ -->
+  <main id="screen-transfer" class="screen">
+    <div class="transfer-layout">
+
+      <!-- Left: Connection info + file pick -->
+      <div class="panel panel-left">
+        <div class="peer-info">
+          <div class="peer-avatar" id="my-avatar">ME</div>
+          <div class="peer-conn-line">
+            <div class="conn-pulse"></div>
+          </div>
+          <div class="peer-avatar peer-remote" id="peer-avatar">P2P</div>
+        </div>
+        <div class="peer-labels">
+          <span id="my-label">You (Sender)</span>
+          <span id="peer-label">Peer (Receiver)</span>
+        </div>
+
+        <!-- File Drop Zone -->
+        <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-label="Drop files or click to select">
+          <input type="file" id="file-input" multiple style="display:none" />
+          <div class="drop-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p class="drop-main">Drop files here</p>
+          <p class="drop-sub">or <u>click to browse</u></p>
+          <p class="drop-limit">Up to 1 GB per file • Multiple files OK</p>
+        </div>
+
+        <!-- Queued Files -->
+        <div id="file-queue" class="file-queue hidden"></div>
+
+        <div class="send-actions hidden" id="send-actions">
+          <button id="btn-send" class="btn btn-primary full-width">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            Send Files
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Transfer progress -->
+      <div class="panel panel-right">
+        <div class="stats-row">
+          <div class="stat-card">
+            <span class="stat-label">Speed</span>
+            <span class="stat-val" id="stat-speed">— MB/s</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">ETA</span>
+            <span class="stat-val" id="stat-eta">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Transferred</span>
+            <span class="stat-val" id="stat-transferred">0 B</span>
+          </div>
+        </div>
+
+        <!-- Active Transfer -->
+        <div id="active-transfer" class="active-transfer hidden">
+          <div class="transfer-file-info">
+            <div class="file-icon-wrap">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/>
+              </svg>
+            </div>
+            <div>
+              <div class="tf-name" id="tf-filename">filename.ext</div>
+              <div class="tf-size" id="tf-filesize">0 B</div>
+            </div>
+            <div class="tf-pct" id="tf-pct">0%</div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+            <div class="progress-glow" id="progress-glow" style="width:0%"></div>
+          </div>
+          <div class="transfer-controls">
+            <button id="btn-pause" class="btn btn-ghost btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+              Pause
+            </button>
+            <button id="btn-resume" class="btn btn-ghost btn-sm hidden">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Resume
+            </button>
+            <button id="btn-cancel-transfer" class="btn btn-danger btn-sm">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Received Files -->
+        <div id="received-files" class="received-files">
+          <h3 class="section-title" id="received-title" style="display:none">Received Files</h3>
+          <div id="received-list"></div>
+        </div>
+
+        <!-- Transfer History -->
+        <div id="transfer-history" class="transfer-history hidden">
+          <h3 class="section-title">Completed</h3>
+          <div id="history-list"></div>
+        </div>
+
+        <div class="room-footer">
+          <span class="room-code-tag">Room: <strong id="footer-room-code">——</strong></span>
+          <button id="btn-disconnect" class="btn btn-ghost btn-sm">Disconnect</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── SCRIPTS ── -->
+  <!-- Firebase SDKs (v9 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script src="js/firebase-config.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/webrtc.js"></script>
+  <script src="js/transfer.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
