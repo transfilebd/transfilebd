@@ -18,10 +18,10 @@
 //  MAX_INFLIGHT     : 64 chunks pre-read into memory so disk/File
 //                     API is never the bottleneck.
 
-const CHUNK_SIZE      = 256 * 1024;       // 256 KB per chunk
-const BUFFER_HIGH     = 16 * 1024 * 1024; // 16 MB  — pause threshold
-const BUFFER_LOW_MARK = 4  * 1024 * 1024; // 4 MB   — resume mark
-const MAX_INFLIGHT    = 64;               // chunks pre-buffered
+const CHUNK_SIZE      = 256 * 1024;      // 256 KB per chunk
+const BUFFER_HIGH     = 2 * 1024 * 1024; // 2 MB  — pause threshold (browser-safe)
+const BUFFER_LOW_MARK = 256 * 1024;      // 256 KB — resume mark
+const MAX_INFLIGHT    = 16;              // chunks pre-buffered
 
 // ── Message Types (sent as JSON header) ───────────────────
 
@@ -43,6 +43,7 @@ let senderState = {
   paused:      false,
   cancelled:   false,
   resolve:     null,
+  watchdog:    null,  // interval that unsticks flow control if event missed
 };
 
 // ── Receiver State ────────────────────────────────────────
@@ -142,12 +143,14 @@ async function sendSingleFile(file) {
   initStats();
   resetProgress();
 
-  // Send metadata
+  // Send metadata (include totalChunks so receiver knows exactly when to finish)
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   sendData(JSON.stringify({
-    type:   MSG.FILE_META,
-    name:   file.name,
-    size:   file.size,
+    type:        MSG.FILE_META,
+    name:        file.name,
+    size:        file.size,
     fileId,
+    totalChunks,
   }));
 
   // Flow-control: resume pumping when buffer drains below BUFFER_LOW_MARK
@@ -162,8 +165,6 @@ async function sendSingleFile(file) {
   //  We slice the file into ArrayBuffers ahead of time so the
   //  DataChannel is never waiting on File API reads.
   //  MAX_INFLIGHT chunks are kept in a ring buffer in memory.
-
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   let   readIdx     = 0;   // next chunk index to read from disk
   let   sendIdx     = 0;   // next chunk index to send
   const prefetched  = [];  // ArrayBuffer[]
@@ -195,9 +196,23 @@ async function sendSingleFile(file) {
       if (senderState.cancelled) return;
     }
 
-    // Flow control — if buffer too full, wait
+    // Flow control — wait if buffer too full
+    // Watchdog polls every 50ms in case bufferedamountlow event is missed
     if (getBufferedAmount() > BUFFER_HIGH) {
-      await new Promise(resolve => { senderState.resolve = resolve; });
+      await new Promise(resolve => {
+        senderState.resolve = resolve;
+        // Watchdog: poll until buffer drains — prevents permanent stuck
+        senderState.watchdog = setInterval(() => {
+          if (getBufferedAmount() <= BUFFER_LOW_MARK) {
+            clearInterval(senderState.watchdog);
+            senderState.watchdog = null;
+            if (senderState.resolve) {
+              senderState.resolve();
+              senderState.resolve = null;
+            }
+          }
+        }, 50);
+      });
     }
 
     // Grab prefetched chunk
@@ -271,6 +286,10 @@ function resumeTransfer() {
 function cancelTransfer() {
   senderState.cancelled = true;
   senderState.paused    = false;
+  if (senderState.watchdog) {
+    clearInterval(senderState.watchdog);
+    senderState.watchdog = null;
+  }
   if (senderState.resolve) {
     senderState.resolve();
     senderState.resolve = null;
@@ -324,12 +343,15 @@ function handleControlMessage(msg) {
 
 function startReceiving(meta) {
   receiverState = {
-    receiving: true,
-    fileName:  meta.name,
-    fileSize:  meta.size,
-    fileId:    meta.fileId,
-    chunks:    [],
-    received:  0,
+    receiving:    true,
+    fileName:     meta.name,
+    fileSize:     meta.size,
+    fileId:       meta.fileId,
+    totalChunks:  meta.totalChunks || null, // null = legacy sender fallback
+    chunksRecvd:  0,
+    doneSignaled: false,   // FILE_DONE arrived before all chunks?
+    chunks:       [],
+    received:     0,
   };
 
   document.getElementById('active-transfer').classList.remove('hidden');
@@ -344,15 +366,40 @@ function handleChunk(buffer) {
   if (!receiverState.receiving) return;
   receiverState.chunks.push(buffer);
   receiverState.received += buffer.byteLength;
+  receiverState.chunksRecvd++;
   updateStats(receiverState.received, receiverState.fileSize);
+
+  // If FILE_DONE already arrived before this last chunk, finish now
+  if (
+    receiverState.doneSignaled &&
+    receiverState.totalChunks !== null &&
+    receiverState.chunksRecvd >= receiverState.totalChunks
+  ) {
+    assembleAndSave(receiverState.fileId);
+  }
 }
 
 function finishReceiving(fileId) {
   if (!receiverState.receiving || receiverState.fileId !== fileId) return;
+
+  // If we know totalChunks and haven't received them all yet —
+  // mark doneSignaled and let handleChunk trigger assembleAndSave
+  if (
+    receiverState.totalChunks !== null &&
+    receiverState.chunksRecvd < receiverState.totalChunks
+  ) {
+    receiverState.doneSignaled = true;
+    return; // wait for remaining chunks
+  }
+
+  assembleAndSave(fileId);
+}
+
+function assembleAndSave(fileId) {
+  if (!receiverState.receiving) return;
   receiverState.receiving = false;
 
-  // Reconstruct file — use a single Blob() call instead of Uint8Array copy
-  // for large files this is significantly faster (no extra memory copy)
+  // Reconstruct file — Blob constructor avoids extra memory copy
   const blob    = new Blob(receiverState.chunks);
   const blobUrl = URL.createObjectURL(blob);
 
